@@ -253,48 +253,67 @@ with transcribe_tab:
                 st.session_state["active_segment"] = selected_segment
 
                 if HOSTED:
-                    st.success("Transcription complete. Download below or polish with AI.")
-                    st.download_button("Download raw .txt", raw, file_name="transcript.txt", mime="text/plain")
+                    st.success("Transcription complete. Choose what to do in Step 4.")
                 else:
                     save_transcript(f"raw_{selected_segment}", raw)
                     st.success("Transcription complete. Raw transcript saved to history.")
 
-            # Step 4 — AI polish
+            # Step 4 — AI polish or raw download
             if "raw_transcript" in st.session_state:
-                st.header("Step 4 — Polish with AI (optional)")
-                instruction = st.text_area(
-                    "Instructions for the AI",
-                    value=(
-                        "Clean up the grammar of this transcript. Remove filler words "
-                        "(um, uh, like) and organise the text into readable paragraphs "
-                        "with logical headings. Do not change the meaning."
-                    ),
+                st.header("Step 4 — Output")
+                polish_mode = st.radio(
+                    "What would you like to do?",
+                    ["Download raw transcript", "Polish with AI"],
+                    horizontal=True,
                 )
 
-                if st.button("Polish transcript"):
-                    with st.spinner(f"Sending to {provider} — {selected_model}…"):
-                        try:
-                            polished = call_llm(
-                                system_msg="You are an expert editor who cleans up raw audio transcripts.",
-                                user_msg=f"{instruction}\n\nTranscript:\n{st.session_state['raw_transcript']}",
-                            )
-                            if not HOSTED:
-                                save_transcript(
-                                    st.session_state.get("active_segment", "segment"),
-                                    polished,
+                if polish_mode == "Download raw transcript":
+                    raw = st.session_state["raw_transcript"]
+                    st.subheader("Raw transcript")
+                    st.text_area("Preview", value=raw, height=300)
+                    st.download_button(
+                        "Download .txt", raw,
+                        file_name="transcript.txt", mime="text/plain",
+                    )
+                    st.download_button(
+                        "Download .md", raw,
+                        file_name="transcript.md", mime="text/markdown",
+                    )
+
+                else:
+                    instruction = st.text_area(
+                        "Instructions for the AI",
+                        value=(
+                            "Clean up the grammar of this transcript. Remove filler words "
+                            "(um, uh, like) and organise the text into readable paragraphs "
+                            "with logical headings. Do not change the meaning."
+                        ),
+                    )
+
+                    if st.button("Polish transcript"):
+                        with st.spinner(f"Sending to {provider} — {selected_model}…"):
+                            try:
+                                polished = call_llm(
+                                    system_msg="You are an expert editor who cleans up raw audio transcripts.",
+                                    user_msg=f"{instruction}\n\nTranscript:\n{st.session_state['raw_transcript']}",
                                 )
-                            st.subheader("Polished transcript")
-                            st.write(polished)
-                            st.download_button(
-                                "Download .txt", polished,
-                                file_name="transcript.txt", mime="text/plain",
-                            )
-                            st.download_button(
-                                "Download .md", polished,
-                                file_name="transcript.md", mime="text/markdown",
-                            )
-                        except Exception as e:
-                            st.error(f"AI polishing failed: {e}")
+                                if not HOSTED:
+                                    save_transcript(
+                                        st.session_state.get("active_segment", "segment"),
+                                        polished,
+                                    )
+                                st.subheader("Polished transcript")
+                                st.write(polished)
+                                st.download_button(
+                                    "Download .txt", polished,
+                                    file_name="transcript.txt", mime="text/plain",
+                                )
+                                st.download_button(
+                                    "Download .md", polished,
+                                    file_name="transcript.md", mime="text/markdown",
+                                )
+                            except Exception as e:
+                                st.error(f"AI polishing failed: {e}")
 
 if history_tab is not None:
     with history_tab:
