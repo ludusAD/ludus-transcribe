@@ -73,12 +73,43 @@ Opens at **http://localhost:8501**
 
 ---
 
-## Using a local model (LM Studio, Ollama, etc.)
+## Using a local model (no API key needed)
 
-1. Start your local inference server
-2. In the app sidebar, select **Local (OpenAI-compatible)**
-3. Set the Base URL to your server's address (default: `http://localhost:1234/v1`)
-4. The app will fetch available models automatically
+Select **Local (OpenAI-compatible)** in the sidebar. The app connects to your local inference server and fetches available models automatically.
+
+### Option A — Ollama (recommended, simplest)
+
+```bash
+# Install (Linux/macOS)
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull a model — Phi-4-mini is a good starting point
+# 3.8B parameters · ~2.5 GB download · runs well on 8 GB RAM
+ollama pull phi4-mini
+
+# Ollama starts automatically and serves at http://localhost:11434/v1
+```
+
+In the app:
+- Base URL: `http://localhost:11434/v1`
+- API token: leave blank (or type anything — Ollama ignores it)
+- Model: select `phi4-mini` from the dropdown
+
+Other good small models: `qwen2.5:7b` (~5 GB, very capable), `mistral` (~4 GB), `llama3.2:3b` (~2 GB, fastest).
+
+### Option B — LM Studio (GUI, beginner-friendly)
+
+1. Download from **https://lmstudio.ai** and install
+2. Open LM Studio → **Discover** → search for **Phi-4-Mini**
+3. Download the **Q4_K_M** quantized version (~2.5 GB)
+4. Go to **Local Server** → click **Start Server** (default port 1234)
+
+In the app:
+- Base URL: `http://localhost:1234/v1` (already the default)
+- API token: leave blank
+- Model: selected automatically from the dropdown
+
+**Recommended model for transcript cleanup:** `Phi-4-mini` — fast, accurate, fits on most laptops.
 
 ---
 
