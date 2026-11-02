@@ -1,23 +1,42 @@
 import os
 import subprocess
+import tempfile
 from datetime import date, datetime
 
 import streamlit as st
 from faster_whisper import WhisperModel
 from openai import OpenAI
 
+HOSTED = os.environ.get("HOSTED", "").lower() in ("1", "true", "yes")
+
 st.set_page_config(page_title="Ludus Transcribe", layout="wide")
 st.title("Ludus Transcribe")
 st.caption("Offline video transcription with optional AI polishing")
 
 # ---------------------------------------------------------------------------
-# Directories
+# Directories — per-session temp dirs in hosted mode, persistent dirs locally
 # ---------------------------------------------------------------------------
-UPLOAD_DIR = "uploaded_videos"
-SPLIT_DIR = "split_segments"
-HISTORY_DIR = "transcript_history"
+if HOSTED:
+    if "work_dir" not in st.session_state:
+        st.session_state["work_dir"] = tempfile.mkdtemp(prefix="ludus_transcribe_")
+    _base = st.session_state["work_dir"]
+    UPLOAD_DIR = os.path.join(_base, "uploaded_videos")
+    SPLIT_DIR = os.path.join(_base, "split_segments")
+    HISTORY_DIR = os.path.join(_base, "transcript_history")
+else:
+    UPLOAD_DIR = "uploaded_videos"
+    SPLIT_DIR = "split_segments"
+    HISTORY_DIR = "transcript_history"
+
 for d in (UPLOAD_DIR, SPLIT_DIR, HISTORY_DIR):
     os.makedirs(d, exist_ok=True)
+
+if HOSTED:
+    st.info(
+        "🔒 **Hosted mode** — your files are processed in memory on this server and deleted when your session ends. "
+        "Nothing is stored, logged, or visible to anyone — including the server operator.",
+        icon=None,
+    )
 
 # ---------------------------------------------------------------------------
 # LLM provider config (sidebar)
@@ -155,9 +174,13 @@ def parse_dt(filename: str) -> datetime | None:
 
 
 # ---------------------------------------------------------------------------
-# Tabs
+# Tabs — History hidden in hosted mode (no persistent storage)
 # ---------------------------------------------------------------------------
-transcribe_tab, history_tab = st.tabs(["Transcribe", "History"])
+if HOSTED:
+    transcribe_tab = st.container()
+    history_tab = None
+else:
+    transcribe_tab, history_tab = st.tabs(["Transcribe", "History"])
 
 with transcribe_tab:
     uploaded_file = st.sidebar.file_uploader(
@@ -229,9 +252,12 @@ with transcribe_tab:
                 st.session_state["raw_transcript"] = raw
                 st.session_state["active_segment"] = selected_segment
 
-                # Always save the raw transcript
-                save_transcript(f"raw_{selected_segment}", raw)
-                st.success("Transcription complete. Raw transcript saved to history.")
+                if HOSTED:
+                    st.success("Transcription complete. Download below or polish with AI.")
+                    st.download_button("Download raw .txt", raw, file_name="transcript.txt", mime="text/plain")
+                else:
+                    save_transcript(f"raw_{selected_segment}", raw)
+                    st.success("Transcription complete. Raw transcript saved to history.")
 
             # Step 4 — AI polish
             if "raw_transcript" in st.session_state:
@@ -252,10 +278,11 @@ with transcribe_tab:
                                 system_msg="You are an expert editor who cleans up raw audio transcripts.",
                                 user_msg=f"{instruction}\n\nTranscript:\n{st.session_state['raw_transcript']}",
                             )
-                            save_transcript(
-                                st.session_state.get("active_segment", "segment"),
-                                polished,
-                            )
+                            if not HOSTED:
+                                save_transcript(
+                                    st.session_state.get("active_segment", "segment"),
+                                    polished,
+                                )
                             st.subheader("Polished transcript")
                             st.write(polished)
                             st.download_button(
@@ -269,47 +296,48 @@ with transcribe_tab:
                         except Exception as e:
                             st.error(f"AI polishing failed: {e}")
 
-with history_tab:
-    st.header("Transcript history")
-    files = sorted(
-        [f for f in os.listdir(HISTORY_DIR) if f.endswith(".md")], reverse=True
-    )
-
-    if not files:
-        st.info("No saved transcripts yet.")
-    else:
-        records = [{"file": f, "dt": parse_dt(f)} for f in files]
-        query = st.text_input("Search by filename").strip().lower()
-
-        valid_dates = sorted({r["dt"].date() for r in records if r["dt"]})
-        if valid_dates:
-            date_range = st.date_input(
-                "Date range",
-                value=(min(valid_dates), max(valid_dates)),
-                min_value=min(valid_dates),
-                max_value=max(valid_dates),
-            )
-            start_date = date_range[0] if isinstance(date_range, tuple) else date_range
-            end_date = date_range[1] if isinstance(date_range, tuple) and len(date_range) == 2 else start_date
-        else:
-            start_date, end_date = date.min, date.max
-
-        filtered = [
-            r["file"] for r in records
-            if (not query or query in r["file"].lower())
-            and (r["dt"] is None or start_date <= r["dt"].date() <= end_date)
-        ]
-
-        st.caption(f"Showing {len(filtered)} of {len(files)} transcripts")
-        if not filtered:
-            st.warning("No transcripts match the filters.")
-            st.stop()
-
-        chosen = st.selectbox("Transcript", filtered)
-        with open(os.path.join(HISTORY_DIR, chosen), encoding="utf-8") as f:
-            content = f.read()
-
-        st.text_area("Content", value=content, height=400)
-        st.download_button(
-            "Download .md", content, file_name=chosen, mime="text/markdown"
+if history_tab is not None:
+    with history_tab:
+        st.header("Transcript history")
+        files = sorted(
+            [f for f in os.listdir(HISTORY_DIR) if f.endswith(".md")], reverse=True
         )
+
+        if not files:
+            st.info("No saved transcripts yet.")
+        else:
+            records = [{"file": f, "dt": parse_dt(f)} for f in files]
+            query = st.text_input("Search by filename").strip().lower()
+
+            valid_dates = sorted({r["dt"].date() for r in records if r["dt"]})
+            if valid_dates:
+                date_range = st.date_input(
+                    "Date range",
+                    value=(min(valid_dates), max(valid_dates)),
+                    min_value=min(valid_dates),
+                    max_value=max(valid_dates),
+                )
+                start_date = date_range[0] if isinstance(date_range, tuple) else date_range
+                end_date = date_range[1] if isinstance(date_range, tuple) and len(date_range) == 2 else start_date
+            else:
+                start_date, end_date = date.min, date.max
+
+            filtered = [
+                r["file"] for r in records
+                if (not query or query in r["file"].lower())
+                and (r["dt"] is None or start_date <= r["dt"].date() <= end_date)
+            ]
+
+            st.caption(f"Showing {len(filtered)} of {len(files)} transcripts")
+            if not filtered:
+                st.warning("No transcripts match the filters.")
+                st.stop()
+
+            chosen = st.selectbox("Transcript", filtered)
+            with open(os.path.join(HISTORY_DIR, chosen), encoding="utf-8") as f:
+                content = f.read()
+
+            st.text_area("Content", value=content, height=400)
+            st.download_button(
+                "Download .md", content, file_name=chosen, mime="text/markdown"
+            )

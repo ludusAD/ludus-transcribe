@@ -113,6 +113,23 @@ In the app:
 
 ---
 
+## Self-hosting (server deployment)
+
+Set `HOSTED=true` before running. In this mode:
+
+- All uploaded files and segments are stored in per-session temporary directories on the server.
+- Files are discarded when the session ends — nothing is written to persistent storage.
+- The History tab is hidden — there is nothing to browse.
+- Download buttons are shown immediately after transcription and polishing.
+
+```bash
+HOSTED=true streamlit run app.py --server.port 8501
+```
+
+The app will show a privacy notice to users confirming that their files are not stored or accessible by the server operator.
+
+---
+
 ## Project structure
 
 ```
