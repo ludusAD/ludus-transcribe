@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+uploaded_videos/
+split_segments/
+transcript_history/
+.DS_Store
+ludus_transcribe/
